@@ -14,9 +14,9 @@ extension `Acoustics Tests` {
             (4070.0, 0.8, -0.3),
         ].map {
             Acoustics.Resonator.Mode(
-                frequency: $0.0,
-                decay: decay,
-                mass: $0.1 * 0.01,
+                frequency: Frequency.hertz($0.0),
+                decay: Decay.amount(decay),
+                mass: Mass.kilograms($0.1 * 0.01),
                 reach: $0.2,
                 stretch: stretch * $0.1
             )
@@ -29,7 +29,7 @@ extension `Acoustics Tests`.Resonator {
         let interval = 1 / 48_000.0
         var resonator = Acoustics.Resonator(
             [.init(frequency: 4_321, decay: 0, mass: 1, reach: 1)],
-            every: interval
+            every: Time.Duration.seconds(interval)
         )
         resonator.displace(to: [1])
         var worst = 0.0
@@ -39,7 +39,7 @@ extension `Acoustics Tests`.Resonator {
             let expected =
                 cos(2 * Double.pi * 4_321 * (Double(tick) + 0.5) * interval)
                 / cos(2 * Double.pi * 4_321 * interval / 2)
-            worst = max(worst, abs(resonator.displacements[0] - expected))
+            worst = max(worst, abs(resonator.displacements[0].underlying - expected))
             tick += 1
         }
         #expect(worst < 1e-8)
@@ -49,7 +49,7 @@ extension `Acoustics Tests`.Resonator {
         let interval = 1 / 48_000.0
         var resonator = Acoustics.Resonator(
             [.init(frequency: 300, decay: 4, mass: 1, reach: 1)],
-            every: interval
+            every: Time.Duration.seconds(interval)
         )
         resonator.displace(to: [1])
         let start = resonator.energy
@@ -96,14 +96,14 @@ extension `Acoustics Tests`.Resonator {
                 stiffening: 4e8,
                 every: 1 / 48_000.0
             )
-            resonator.displace(to: [size])
+            resonator.displace(to: [Space.Physical.metres(size)])
             let start = resonator.energy
             var count = 0
             var worst = 0.0
             var last = size
             (0..<48_000).forEach { _ in
                 resonator.advance()
-                let here = resonator.displacements[0]
+                let here = resonator.displacements[0].underlying
                 if (here < 0) != (last < 0) { count += 1 }
                 last = here
                 worst = max(worst, abs(resonator.energy / start - 1))
@@ -126,7 +126,7 @@ extension `Acoustics Tests`.Resonator {
             reach: 1,
             heard: [.init(moving: 3), .init(moving: 0, turning: 2)]
         )
-        var resonator = Acoustics.Resonator([mode], every: interval)
+        var resonator = Acoustics.Resonator([mode], every: Time.Duration.seconds(interval))
         resonator.displace(to: [1])
         var worstMoving = 0.0
         var worstTurning = 0.0
@@ -161,7 +161,7 @@ extension `Acoustics Tests`.Striker {
         let interval = 1 / 192_000.0
         var wall = Acoustics.Resonator(
             [.init(frequency: 50, decay: 0, mass: 1e9, reach: 1)],
-            every: interval
+            every: Time.Duration.seconds(interval)
         )
         wall.strike(with: Acoustics.Striker(mass: 0.02, stiffness: 8_000, exponent: 1), at: 1)
         var touched = 0
@@ -169,7 +169,7 @@ extension `Acoustics Tests`.Striker {
         while wall.struck {
             wall.advance()
             if wall.touching { touched += 1 }
-            peak = max(peak, wall.force)
+            peak = max(peak, wall.force.underlying)
         }
         let expected = Double.pi * (0.02 / 8_000).squareRoot()
         #expect(abs(Double(touched) * interval - expected) < 3 * interval)
@@ -181,7 +181,7 @@ extension `Acoustics Tests`.Striker {
             var resonator = Acoustics.Resonator(`Acoustics Tests`.few(decay: 2), every: 1 / 48_000.0)
             resonator.strike(
                 with: Acoustics.Striker(mass: 0.012, stiffness: 1.5e9, exponent: 3),
-                at: speed
+                at: Velocity.amount(speed)
             )
             var touched = 0
             var tick = 0

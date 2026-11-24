@@ -2,16 +2,19 @@ internal import Numeric
 
 extension Acoustics {
     public struct Resonator: Sendable {
-        public let interval: Double
+        public let interval: Time.Duration.Value<Double>
+        /// How much tighter the head is held the further it moves, in N/m³ for a head whose `stretch` is a pure
+        /// number. No atom holds this kind yet, so it is a scalar.
         public let stiffening: Double
         public let ears: Int
         public private(set) var touching = false
-        public private(set) var force = 0.0
+        /// What the striker pressed with during the last step.
+        public private(set) var force = Force.Value<Double>.zero
         public private(set) var heard: [Double]
         /// The number of places the modes can be driven.
         public let ports: Int
         /// Where each driven place is now.
-        public private(set) var felt: [Double]
+        public private(set) var felt: [Length<Space.Physical, Double>]
         @usableFromInline var driven: [Double]
         @usableFromInline var count: Int
         @usableFromInline var warped: [Double]
@@ -31,24 +34,25 @@ extension Acoustics {
         @usableFromInline var place = 0.0
         @usableFromInline var placed = 0.0
 
-        public init(_ modes: [Mode], stiffening: Double = 0, every interval: Double) {
+        public init(_ modes: [Mode], stiffening: Double = 0, every interval: Time.Duration.Value<Double>) {
             self.interval = interval
+            let interval = interval.underlying
             self.stiffening = stiffening
             self.count = modes.count
             self.ears = modes.map(\.heard.count).min() ?? 0
             self.heard = [Double](repeating: 0, count: ears)
             let ports = modes.map(\.driven.count).min() ?? 0
             self.ports = ports
-            self.felt = [Double](repeating: 0, count: ports)
+            self.felt = [Length<Space.Physical, Double>](repeating: .zero, count: ports)
             self.driven = modes.flatMap { $0.driven.prefix(ports) }
-            self.angular = modes.map { 2 * Double.pi * $0.frequency }
+            self.angular = modes.map { 2 * Double.pi * $0.frequency.underlying }
             self.warped = angular.map { angle in
                 let half = Double.math.sin(angle * interval / 2)
                 return 4 * half * half
             }
             self.square = angular.map { $0 * $0 * interval * interval / 2 }
-            self.loss = modes.map { $0.decay * interval }
-            self.mass = modes.map(\.mass)
+            self.loss = modes.map { $0.decay.underlying * interval }
+            self.mass = modes.map(\.mass.underlying)
             self.reach = modes.map(\.reach)
             self.stretch = modes.map(\.stretch)
             var moving: [Double] = []
@@ -72,31 +76,43 @@ extension Acoustics {
 }
 
 extension Acoustics.Resonator {
-    public var displacements: [Double] { now }
+    /// Each resonance's displacement, in order.
+    public var displacements: [Length<Space.Physical, Double>] { now.map { Space.Physical.metres($0) } }
 
-    public var surface: Double {
+    /// The displacement at the place that is struck.
+    public var surface: Length<Space.Physical, Double> { Space.Physical.metres(reached) }
+
+    @usableFromInline
+    var reached: Double {
         var sum = 0.0
         for index in now.indices { sum += reach[index] * now[index] }
         return sum
     }
 
-    public mutating func displace(to displacements: [Double], moving velocities: [Double] = []) {
+    public mutating func displace(
+        to displacements: [Length<Space.Physical, Double>],
+        moving velocities: [Velocity.Value<Double>] = []
+    ) {
+        let interval = self.interval.underlying
         for (index, displacement) in displacements.prefix(count).enumerated() {
-            now[index] = displacement
-            before[index] = displacement - (index < velocities.count ? velocities[index] : 0) * interval
+            now[index] = displacement.underlying
+            before[index] =
+                displacement.underlying - (index < velocities.count ? velocities[index].underlying : 0) * interval
         }
     }
 
-    public mutating func strike(with striker: Acoustics.Striker, at speed: Double) {
+    public mutating func strike(with striker: Acoustics.Striker, at speed: Velocity.Value<Double>) {
         self.striker = striker
-        place = surface
-        placed = place - speed * interval
+        place = reached
+        placed = place - speed.underlying * interval.underlying
         touching = false
     }
 
     public var struck: Bool { striker != nil }
 
-    public var energy: Double {
+    /// The motion's energy and what the springs and the felt store.
+    public var energy: Energy.Value<Double> {
+        let interval = self.interval.underlying
         var total = 0.0
         var reached = 0.0
         var reachedBefore = 0.0
@@ -119,11 +135,12 @@ extension Acoustics.Resonator {
                 (striker.energy(pressed: place - reached) + striker.energy(pressed: placed - reachedBefore))
                 / 2
         }
-        return total
+        return Energy.joules(total)
     }
 
     /// Steps once. `forces` push on the driven places, one each, as they stand now.
-    public mutating func advance(driven forces: [Double] = []) {
+    public mutating func advance(driven forces: [Force.Value<Double>] = []) {
+        let interval = self.interval.underlying
         var spread = 0.0
         if stiffening != 0 {
             for index in now.indices { spread += stretch[index] * now[index] * now[index] }
@@ -144,7 +161,7 @@ extension Acoustics.Resonator {
                 var port = 0
                 let used = Swift.min(ports, forces.count)
                 while port < used {
-                    pushed += driven[index * ports + port] * forces[port]
+                    pushed += driven[index * ports + port] * forces[port].underlying
                     port += 1
                 }
                 next += step * pushed / (mass[index] * weight)
@@ -169,9 +186,9 @@ extension Acoustics.Resonator {
         } else {
             touching = false
         }
-        force = push
+        force = Force.newtons(push)
         for ear in heard.indices { heard[ear] = 0 }
-        for port in felt.indices { felt[port] = 0 }
+        for port in felt.indices { felt[port] = .zero }
         for index in now.indices {
             let next = ahead[index] + lean[index] * push
             let quickening = next - 2 * now[index] + before[index]
@@ -184,7 +201,7 @@ extension Acoustics.Resonator {
             }
             var port = 0
             while port < ports {
-                felt[port] += driven[index * ports + port] * next
+                felt[port] += Space.Physical.metres(driven[index * ports + port] * next)
                 port += 1
             }
             before[index] = now[index]
