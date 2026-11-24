@@ -3,9 +3,9 @@ internal import Numeric
 extension Acoustics {
     public struct Resonator: Sendable {
         public let interval: Time.Duration.Value<Double>
-        /// How much tighter the head is held the further it moves, in N/m³ for a head whose `stretch` is a pure
-        /// number. No atom holds this kind yet, so it is a scalar.
-        public let stiffening: Double
+        /// How much tighter the head is held the further it moves, for a head whose `stretch` is a pure number: the
+        /// head's force on a resonance grows as the cube of how far the resonances move.
+        public let stiffening: Stiffness.Cubic.Value<Double>
         public let ears: Int
         public private(set) var touching = false
         /// What the striker pressed with during the last step.
@@ -34,7 +34,10 @@ extension Acoustics {
         @usableFromInline var place = 0.0
         @usableFromInline var placed = 0.0
 
-        public init(_ modes: [Mode], stiffening: Double = 0, every interval: Time.Duration.Value<Double>) {
+        public init(
+            _ modes: [Mode],
+            stiffening: Stiffness.Cubic.Value<Double> = .zero,
+            every interval: Time.Duration.Value<Double>) {
             self.interval = interval
             let interval = interval.underlying
             self.stiffening = stiffening
@@ -127,12 +130,13 @@ extension Acoustics.Resonator {
             spread += stretch[index] * now[index] * now[index]
             spreadBefore += stretch[index] * before[index] * before[index]
         }
-        total += stiffening * spread * spreadBefore / 4
+        total += stiffening.underlying * spread * spreadBefore / 4
         if let striker {
             let velocity = (place - placed) / interval
-            total += striker.mass * velocity * velocity / 2
+            total += striker.mass.underlying * velocity * velocity / 2
             total +=
-                (striker.energy(pressed: place - reached) + striker.energy(pressed: placed - reachedBefore))
+                (Self.energy(of: striker, pressed: place - reached)
+                    + Self.energy(of: striker, pressed: placed - reachedBefore))
                 / 2
         }
         return Energy.joules(total)
@@ -142,10 +146,10 @@ extension Acoustics.Resonator {
     public mutating func advance(driven forces: [Force.Value<Double>] = []) {
         let interval = self.interval.underlying
         var spread = 0.0
-        if stiffening != 0 {
+        if stiffening != .zero {
             for index in now.indices { spread += stretch[index] * now[index] * now[index] }
         }
-        let tension = stiffening * spread
+        let tension = stiffening.underlying * spread
         let step = interval * interval
         var free = 0.0
         var give = 0.0
@@ -177,8 +181,8 @@ extension Acoustics.Resonator {
             let coasting = 2 * place - placed
             let last = placed - reachedBefore
             let wanted = coasting - free - last
-            push = Self.push(striker, from: last, wanted: wanted, slack: step / striker.mass + give)
-            let next = coasting - step * push / striker.mass
+            push = Self.push(striker, from: last, wanted: wanted, slack: step / striker.mass.underlying + give)
+            let next = coasting - step * push / striker.mass.underlying
             placed = place
             place = next
             touching = push > 0
@@ -220,13 +224,13 @@ extension Acoustics.Resonator {
         guard last > 0 || last + wanted > 0 else { return 0 }
         func secant(_ change: Double) -> Double {
             change.magnitude < 1e-13
-                ? striker.force(pressed: last + change / 2)
-                : (striker.energy(pressed: last + change) - striker.energy(pressed: last)) / change
+                ? force(of: striker, pressed: last + change / 2)
+                : (energy(of: striker, pressed: last + change) - energy(of: striker, pressed: last)) / change
         }
         var high = wanted
         var low =
             wanted - slack
-            * Swift.max(striker.force(pressed: last), striker.force(pressed: last + wanted))
+            * Swift.max(force(of: striker, pressed: last), force(of: striker, pressed: last + wanted))
         var count = 0
         while count < 64 {
             let middle = low + (high - low) / 2
@@ -234,5 +238,15 @@ extension Acoustics.Resonator {
             count += 1
         }
         return secant(low + (high - low) / 2)
+    }
+
+    /// The striker's push at a compression, in newtons.
+    static func force(of striker: Acoustics.Striker, pressed compression: Double) -> Double {
+        striker.contact.force(pressed: Space.Physical.metres(compression)).underlying
+    }
+
+    /// The energy the striker's contact stores at a compression, in joules.
+    static func energy(of striker: Acoustics.Striker, pressed compression: Double) -> Double {
+        striker.contact.energy(pressed: Space.Physical.metres(compression)).underlying
     }
 }

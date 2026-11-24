@@ -59,7 +59,7 @@ extension `Acoustics Tests`.Resonator {
 
     @Test func `Without loss the energy stays through a stroke`() {
         var resonator = Acoustics.Resonator(`Acoustics Tests`.few(), every: 1 / 48_000.0)
-        resonator.strike(with: Acoustics.Striker(mass: 0.012, stiffness: 1.5e9, exponent: 2.5), at: 2)
+        resonator.strike(with: felt(mass: 0.012, stiffness: 1.5e9, exponent: 2.5), at: 2)
         let start = resonator.energy
         var worst = 0.0
         var touched = 0
@@ -76,7 +76,7 @@ extension `Acoustics Tests`.Resonator {
 
     @Test func `With loss the energy never grows`() {
         var resonator = Acoustics.Resonator(`Acoustics Tests`.few(decay: 3), every: 1 / 48_000.0)
-        resonator.strike(with: Acoustics.Striker(mass: 0.012, stiffness: 1.5e9, exponent: 2.5), at: 2)
+        resonator.strike(with: felt(mass: 0.012, stiffness: 1.5e9, exponent: 2.5), at: 2)
         var last = resonator.energy
         var grew = 0
         (0..<9_600).forEach { _ in
@@ -93,7 +93,7 @@ extension `Acoustics Tests`.Resonator {
         func crossings(_ size: Double) -> (count: Int, drift: Double) {
             var resonator = Acoustics.Resonator(
                 `Acoustics Tests`.few(stretch: 1),
-                stiffening: 4e8,
+                stiffening: Stiffness.Cubic.amount(4e8),
                 every: 1 / 48_000.0
             )
             resonator.displace(to: [Space.Physical.metres(size)])
@@ -163,7 +163,7 @@ extension `Acoustics Tests`.Striker {
             [.init(frequency: 50, decay: 0, mass: 1e9, reach: 1)],
             every: Time.Duration.seconds(interval)
         )
-        wall.strike(with: Acoustics.Striker(mass: 0.02, stiffness: 8_000, exponent: 1), at: 1)
+        wall.strike(with: felt(mass: 0.02, stiffness: 8_000, exponent: 1), at: 1)
         var touched = 0
         var peak = 0.0
         while wall.struck {
@@ -180,7 +180,7 @@ extension `Acoustics Tests`.Striker {
         func touch(_ speed: Double) -> Int {
             var resonator = Acoustics.Resonator(`Acoustics Tests`.few(decay: 2), every: 1 / 48_000.0)
             resonator.strike(
-                with: Acoustics.Striker(mass: 0.012, stiffness: 1.5e9, exponent: 3),
+                with: felt(mass: 0.012, stiffness: 1.5e9, exponent: 3),
                 at: Velocity.amount(speed)
             )
             var touched = 0
@@ -194,11 +194,17 @@ extension `Acoustics Tests`.Striker {
         }
         #expect(touch(4) < touch(0.5))
     }
+}
 
-    @Test func `Force is the slope of the stored energy and nothing is stored apart`() {
-        let felt = Acoustics.Striker(mass: 0.012, stiffness: 2e8, exponent: 2.5)
-        #expect(felt.force(pressed: -0.001) == 0 && felt.energy(pressed: -0.001) == 0)
-        let slope = (felt.energy(pressed: 0.002 + 1e-8) - felt.energy(pressed: 0.002 - 1e-8)) / 2e-8
-        #expect(abs(slope / felt.force(pressed: 0.002) - 1) < 1e-6)
-    }
+/// A striker of a mass on a felt k δ^α, given as F₀ = k δ₀^α at δ₀ = 2⁻¹⁰ m.
+private func felt(mass: Double, stiffness: Double, exponent: Double) -> Acoustics.Striker {
+    let depth = 0x1p-10
+    return Acoustics.Striker(
+        mass: Mass.kilograms(mass),
+        contact: Contact(
+            pushing: Force.newtons(stiffness * Double.math.pow(depth, exponent)),
+            at: Space.Physical.metres(depth),
+            exponent: exponent
+        )
+    )
 }

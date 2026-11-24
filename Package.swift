@@ -23,6 +23,7 @@ let package = Package(
         .package(url: "https://github.com/swift-atoms/swift-frequency.git", branch: "main"),
         .package(url: "https://github.com/swift-atoms/swift-numeric.git", branch: "main"),
         .package(url: "https://github.com/swift-atoms/swift-space.git", branch: "main"),
+        .package(url: "https://github.com/swift-atoms/swift-stiffness.git", branch: "main"),
         .package(url: "https://github.com/swift-atoms/swift-velocity.git", branch: "main"),
     ],
     targets: [
@@ -37,6 +38,7 @@ let package = Package(
                 .product(name: "Frequency", package: "swift-frequency"),
                 .product(name: "Numeric", package: "swift-numeric"),
                 .product(name: "Space", package: "swift-space"),
+                .product(name: "Stiffness", package: "swift-stiffness"),
                 .product(name: "Velocity", package: "swift-velocity"),
             ]
         ),

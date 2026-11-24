@@ -6,4 +6,5 @@
 @_exported public import Frequency
 @_exported public import Numeric
 @_exported public import Space
+@_exported public import Stiffness
 @_exported public import Velocity
