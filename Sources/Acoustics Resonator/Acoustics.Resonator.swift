@@ -37,14 +37,15 @@ extension Acoustics {
         public init(
             _ modes: [Mode],
             stiffening: Stiffness.Cubic.Value<Double> = .zero,
-            every interval: Time.Duration.Value<Double>) {
+            every interval: Time.Duration.Value<Double>
+        ) {
             self.interval = interval
             let interval = interval.underlying
             self.stiffening = stiffening
             self.count = modes.count
-            self.ears = modes.map(\.heard.count).min() ?? 0
+            self.ears = modes.map { $0.heard.count }.min() ?? 0
             self.heard = [Double](repeating: 0, count: ears)
-            let ports = modes.map(\.driven.count).min() ?? 0
+            let ports = modes.map { $0.driven.count }.min() ?? 0
             self.ports = ports
             self.felt = [Length<Space.Physical, Double>](repeating: .zero, count: ports)
             self.driven = modes.flatMap { $0.driven.prefix(ports) }
@@ -55,9 +56,9 @@ extension Acoustics {
             }
             self.square = angular.map { $0 * $0 * interval * interval / 2 }
             self.loss = modes.map { $0.decay.underlying * interval }
-            self.mass = modes.map(\.mass.underlying)
-            self.reach = modes.map(\.reach)
-            self.stretch = modes.map(\.stretch)
+            self.mass = modes.map { $0.mass.underlying }
+            self.reach = modes.map { $0.reach }
+            self.stretch = modes.map { $0.stretch }
             var moving: [Double] = []
             var turning: [Double] = []
             moving.reserveCapacity(count * ears)
